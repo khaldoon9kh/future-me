@@ -24,7 +24,6 @@ import { formatDateTime } from '../utils/dateUtils';
 // Action type options shown in the picker grid
 const ACTION_TYPES = [
   { key: 'reminder', label: 'Reminder', icon: 'alarm-outline', color: '#F59E0B' },
-  { key: 'bookmark', label: 'Bookmark', icon: 'bookmark-outline', color: '#6C63FF' },
   { key: 'send_later', label: 'Send Later', icon: 'paper-plane-outline', color: '#10B981' },
   { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', color: '#6B7280' },
 ];
@@ -43,7 +42,7 @@ export default function QuickAddScreen() {
   // Form state
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
-  const [actionType, setActionType] = useState('bookmark');
+  const [actionType, setActionType] = useState('reminder');
   const [reminderDate, setReminderDate] = useState(defaultReminderDate());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -65,7 +64,7 @@ export default function QuickAddScreen() {
       setEditItemId(item.id);
       setUrl(item.url || '');
       setTitle(item.title || '');
-      setActionType(item.actionType || 'bookmark');
+      setActionType(item.actionType || 'reminder');
       if (item.reminderDateTime) setReminderDate(new Date(item.reminderDateTime));
       setRecipientName(item.recipientName || '');
       setNotes(item.notes || '');
@@ -90,7 +89,7 @@ export default function QuickAddScreen() {
         title: title.trim(),
         actionType,
         reminderDateTime:
-          actionType === 'reminder' ? reminderDate.toISOString() : null,
+          (actionType === 'reminder' || actionType === 'send_later') ? reminderDate.toISOString() : null,
         recipientName: actionType === 'send_later' ? recipientName.trim() : '',
         notes: notes.trim(),
       };
@@ -99,8 +98,8 @@ export default function QuickAddScreen() {
         await storageService.updateItem(editItemId, payload);
       } else {
         const saved = await storageService.saveItem(payload);
-        // Schedule a local notification for reminders
-        if (actionType === 'reminder' && reminderDate > new Date()) {
+        // Schedule a local notification for reminders and send_later
+        if ((actionType === 'reminder' || actionType === 'send_later') && reminderDate > new Date()) {
           const notifId = await notificationService.scheduleReminder(saved);
           if (notifId) {
             await storageService.updateItem(saved.id, { notificationId: notifId });
@@ -124,8 +123,6 @@ export default function QuickAddScreen() {
       const next = new Date(reminderDate);
       next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
       setReminderDate(next);
-      // On Android we show date then time sequentially
-      if (Platform.OS === 'android') setShowTimePicker(true);
     }
   };
 
@@ -240,68 +237,103 @@ export default function QuickAddScreen() {
           </Field>
 
           {/* ── Reminder date/time ── */}
-          {actionType === 'reminder' && (
-            <Field label="Remind me at">
-              <TouchableOpacity
-                style={styles.datePickerBtn}
-                onPress={() => setShowDatePicker(true)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="calendar-outline" size={18} color="#6C63FF" />
-                <Text style={styles.datePickerText}>
-                  {formatDateTime(reminderDate.toISOString())}
-                </Text>
-                <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-              </TouchableOpacity>
+          {(actionType === 'reminder' || actionType === 'send_later') && (
+            <>
+              <Field label="Pick a date">
+                <TouchableOpacity
+                  style={styles.datePickerBtn}
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#6C63FF" />
+                  <Text style={styles.datePickerText}>
+                    {reminderDate.toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
 
-              {/* Android: show date picker, then time picker sequentially */}
-              {showDatePicker && Platform.OS === 'android' && (
-                <DateTimePicker
-                  value={reminderDate}
-                  mode="date"
-                  display="default"
-                  onChange={onDateChange}
-                  minimumDate={new Date()}
-                />
-              )}
-              {showTimePicker && Platform.OS === 'android' && (
-                <DateTimePicker
-                  value={reminderDate}
-                  mode="time"
-                  display="default"
-                  onChange={onTimeChange}
-                />
-              )}
-
-              {/* iOS: inline spinner pickers */}
-              {showDatePicker && Platform.OS === 'ios' && (
-                <View style={styles.iosPickerWrap}>
+                {showDatePicker && Platform.OS === 'android' && (
                   <DateTimePicker
                     value={reminderDate}
                     mode="date"
-                    display="spinner"
+                    display="default"
                     onChange={onDateChange}
                     minimumDate={new Date()}
-                    style={styles.iosPicker}
-                    textColor="#1A1A2E"
                   />
+                )}
+
+                {showDatePicker && Platform.OS === 'ios' && (
+                  <View style={styles.iosPickerWrap}>
+                    <DateTimePicker
+                      value={reminderDate}
+                      mode="date"
+                      display="spinner"
+                      onChange={onDateChange}
+                      minimumDate={new Date()}
+                      style={styles.iosPicker}
+                      textColor="#1A1A2E"
+                    />
+                    <TouchableOpacity
+                      style={styles.iosPickerDone}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.iosPickerDoneText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </Field>
+
+              <Field label="Pick a time">
+                <TouchableOpacity
+                  style={styles.datePickerBtn}
+                  onPress={() => setShowTimePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="time-outline" size={18} color="#6C63FF" />
+                  <Text style={styles.datePickerText}>
+                    {reminderDate.toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {showTimePicker && Platform.OS === 'android' && (
                   <DateTimePicker
                     value={reminderDate}
                     mode="time"
-                    display="spinner"
+                    display="default"
                     onChange={onTimeChange}
-                    style={styles.iosPicker}
-                    textColor="#1A1A2E"
                   />
-                  <TouchableOpacity
-                    style={styles.iosPickerDone}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={styles.iosPickerDoneText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </Field>
+                )}
+
+                {showTimePicker && Platform.OS === 'ios' && (
+                  <View style={styles.iosPickerWrap}>
+                    <DateTimePicker
+                      value={reminderDate}
+                      mode="time"
+                      display="spinner"
+                      onChange={onTimeChange}
+                      style={styles.iosPicker}
+                      textColor="#1A1A2E"
+                    />
+                    <TouchableOpacity
+                      style={styles.iosPickerDone}
+                      onPress={() => setShowTimePicker(false)}
+                    >
+                      <Text style={styles.iosPickerDoneText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </Field>
+            </>
           )}
 
           {/* ── Recipient ── */}

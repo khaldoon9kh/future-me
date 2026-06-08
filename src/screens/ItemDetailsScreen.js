@@ -19,7 +19,6 @@ import { extractDomain } from '../utils/urlUtils';
 
 const ACTION_CONFIG = {
   reminder: { icon: 'alarm', color: '#F59E0B', label: 'Reminder' },
-  bookmark: { icon: 'bookmark', color: '#6C63FF', label: 'Bookmark' },
   send_later: { icon: 'paper-plane', color: '#10B981', label: 'Send Later' },
   other: { icon: 'ellipsis-horizontal-circle', color: '#6B7280', label: 'Other' },
 };

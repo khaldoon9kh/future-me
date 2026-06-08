@@ -7,7 +7,6 @@ import { extractDomain, detectPlatform, platformIcon } from '../utils/urlUtils';
 // Visual config per action type
 const ACTION_CONFIG = {
   reminder: { icon: 'alarm-outline', color: '#F59E0B', label: 'Reminder' },
-  bookmark: { icon: 'bookmark-outline', color: '#6C63FF', label: 'Bookmark' },
   send_later: { icon: 'paper-plane-outline', color: '#10B981', label: 'Send Later' },
   other: { icon: 'ellipsis-horizontal-circle-outline', color: '#6B7280', label: 'Other' },
 };

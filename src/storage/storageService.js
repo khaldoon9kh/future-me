@@ -26,7 +26,7 @@ const storageService = {
         id: generateId(),
         url: item.url ?? '',
         title: item.title ?? '',
-        actionType: item.actionType ?? 'bookmark',
+        actionType: item.actionType ?? 'reminder',
         reminderDateTime: item.reminderDateTime ?? null,
         notificationId: item.notificationId ?? null,
         recipientName: item.recipientName ?? '',

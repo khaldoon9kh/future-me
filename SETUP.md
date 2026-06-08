@@ -204,7 +204,7 @@ Each saved item is stored as a JSON object in AsyncStorage:
   id: string,              // auto-generated (timestamp + random)
   url: string,             // full URL including scheme
   title: string,           // user-supplied or auto-detected
-  actionType: string,      // 'reminder' | 'bookmark' | 'send_later' | 'other'
+  actionType: string,      // 'reminder' | 'send_later' | 'other'
   reminderDateTime: string | null,  // ISO 8601, only for 'reminder'
   notificationId: string | null,    // expo-notifications scheduled ID
   recipientName: string,   // only for 'send_later'
@@ -221,7 +221,7 @@ All items are stored under the AsyncStorage key `@future_me:items` as a JSON arr
 ## Screens overview
 
 ### Home (Inbox)
-- Displays all saved items with filter tabs (All / Reminders / Bookmarks / Send Later / Other)
+- Displays all saved items with filter tabs (All / Reminders / Send Later / Other)
 - Active items appear above completed items
 - Tap **+** to manually add an item
 - Pull to refresh

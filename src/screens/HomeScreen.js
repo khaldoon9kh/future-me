@@ -20,7 +20,6 @@ import EmptyState from '../components/EmptyState';
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All' },
   { key: 'reminder', label: 'Reminders' },
-  { key: 'bookmark', label: 'Bookmarks' },
   { key: 'send_later', label: 'Send Later' },
   { key: 'other', label: 'Other' },
 ];
@@ -37,11 +36,7 @@ const EMPTY_MESSAGES = {
     title: 'No reminders yet',
     subtitle: 'Set a reminder on any saved link and you\'ll find it here.',
   },
-  bookmark: {
-    icon: 'bookmark-outline',
-    title: 'No bookmarks yet',
-    subtitle: 'Bookmark links to save them for later reading.',
-  },
+
   send_later: {
     icon: 'paper-plane-outline',
     title: 'Nothing queued to send',
