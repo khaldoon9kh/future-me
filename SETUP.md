@@ -265,3 +265,6 @@ All items are stored under the AsyncStorage key `@future_me:items` as a JSON arr
 
 **`expo-share-intent` version mismatch**
 → This project uses `expo-share-intent ^2.2.1` targeting Expo SDK 52. If you upgrade Expo, check the package's changelog for the matching version.
+
+**npm ERESOLVE dependency conflicts**
+→ Run `npm install --legacy-peer-deps` to resolve peer dependency conflicts between Expo and React Native versions. This is expected and safe for Expo projects.
