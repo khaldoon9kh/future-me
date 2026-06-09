@@ -95,10 +95,28 @@ export default function QuickAddScreen() {
       };
 
       if (isEditMode) {
-        await storageService.updateItem(editItemId, payload);
+        // Cancel the previously scheduled notification before saving updated fields.
+        // Without this, the old notification would still fire at the original time.
+        const all = await storageService.getAllItems();
+        const existing = all.find((i) => i.id === editItemId);
+        if (existing?.notificationId) {
+          await notificationService.cancelReminder(existing.notificationId);
+        }
+
+        // Save with notificationId cleared — we'll set a new one below if needed.
+        await storageService.updateItem(editItemId, { ...payload, notificationId: null });
+
+        // Re-schedule if this is still a timed action and the date is in the future.
+        if ((actionType === 'reminder' || actionType === 'send_later') && reminderDate > new Date()) {
+          const updatedItem = { ...existing, ...payload, id: editItemId };
+          const notifId = await notificationService.scheduleReminder(updatedItem);
+          if (notifId) {
+            await storageService.updateItem(editItemId, { notificationId: notifId });
+          }
+        }
       } else {
         const saved = await storageService.saveItem(payload);
-        // Schedule a local notification for reminders and send_later
+        // Schedule a local notification for reminders and send_later.
         if ((actionType === 'reminder' || actionType === 'send_later') && reminderDate > new Date()) {
           const notifId = await notificationService.scheduleReminder(saved);
           if (notifId) {
