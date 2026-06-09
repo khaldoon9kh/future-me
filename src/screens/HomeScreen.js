@@ -181,7 +181,7 @@ export default function HomeScreen() {
               item={item}
               onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
               onComplete={async () => {
-                await storageService.markCompleted(item.id);
+                await storageService.updateItem(item.id, { completed: !item.completed });
                 loadItems();
               }}
             />

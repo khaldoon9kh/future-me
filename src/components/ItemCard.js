@@ -70,7 +70,7 @@ export default function ItemCard({ item, onPress, onComplete }) {
           style={styles.checkOverlay}
           onPress={(e) => {
             e.stopPropagation();
-            if (!item.completed) onComplete();
+            onComplete();
           }}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
