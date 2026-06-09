@@ -13,8 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 import { storageService } from '../storage/storageService';
+import { detectPlatform } from '../utils/urlUtils';
 import ItemCard from '../components/ItemCard';
 import FilterTabs from '../components/FilterTabs';
+import PlatformFilter from '../components/PlatformFilter';
 import EmptyState from '../components/EmptyState';
 
 const FILTER_OPTIONS = [
@@ -53,6 +55,7 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const [items, setItems] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activePlatform, setActivePlatform] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
 
   const loadItems = async () => {
@@ -73,10 +76,16 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  // Platform filter first, then action-type filter (AND logic)
+  const platformFiltered =
+    activePlatform === 'all'
+      ? items
+      : items.filter((i) => detectPlatform(i.url) === activePlatform);
+
   const filtered =
     activeFilter === 'all'
-      ? items
-      : items.filter((i) => i.actionType === activeFilter);
+      ? platformFiltered
+      : platformFiltered.filter((i) => i.actionType === activeFilter);
 
   // Active items first, completed at the bottom
   const sortedBase = [
@@ -129,7 +138,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ── Filter tabs ── */}
+      {/* ── Platform filter ── */}
+      <PlatformFilter
+        items={items}
+        activePlatform={activePlatform}
+        onPlatformChange={setActivePlatform}
+      />
+
+      {/* ── Action-type filter tabs ── */}
       <FilterTabs
         options={FILTER_OPTIONS}
         activeFilter={activeFilter}

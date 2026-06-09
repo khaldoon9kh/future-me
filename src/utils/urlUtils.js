@@ -42,6 +42,7 @@ export function detectPlatform(url) {
   if (lower.includes('instagram.com')) return 'instagram';
   if (lower.includes('twitter.com') || lower.includes('x.com')) return 'twitter';
   if (lower.includes('reddit.com')) return 'reddit';
+  if (lower.includes('vimeo.com')) return 'vimeo';
   return 'link';
 }
 
