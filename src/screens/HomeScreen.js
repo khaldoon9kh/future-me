@@ -79,10 +79,15 @@ export default function HomeScreen() {
       : items.filter((i) => i.actionType === activeFilter);
 
   // Active items first, completed at the bottom
-  const sorted = [
+  const sortedBase = [
     ...filtered.filter((i) => !i.completed),
     ...filtered.filter((i) => i.completed),
   ];
+  // Pad to an even count so the 2-column grid has no layout gap on the last row
+  const sorted =
+    sortedBase.length % 2 !== 0
+      ? [...sortedBase, { id: '_placeholder', _isPlaceholder: true }]
+      : sortedBase;
 
   const counts = {
     reminders: items.filter((i) => i.actionType === 'reminder' && !i.completed).length,
@@ -131,13 +136,15 @@ export default function HomeScreen() {
         onFilterChange={setActiveFilter}
       />
 
-      {/* ── List ── */}
+      {/* ── 2-column grid ── */}
       <FlatList
         data={sorted}
         keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={[
           styles.list,
-          sorted.length === 0 && styles.listEmpty,
+          sortedBase.length === 0 && styles.listEmpty,
         ]}
         refreshControl={
           <RefreshControl
@@ -151,16 +158,19 @@ export default function HomeScreen() {
           <EmptyState icon={empty.icon} title={empty.title} subtitle={empty.subtitle} />
         }
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <ItemCard
-            item={item}
-            onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
-            onComplete={async () => {
-              await storageService.markCompleted(item.id);
-              loadItems();
-            }}
-          />
-        )}
+        renderItem={({ item }) => {
+          if (item._isPlaceholder) return <View style={styles.placeholderCell} />;
+          return (
+            <ItemCard
+              item={item}
+              onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
+              onComplete={async () => {
+                await storageService.markCompleted(item.id);
+                loadItems();
+              }}
+            />
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -223,12 +233,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  columnWrapper: {
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
   list: {
-    padding: 16,
     paddingTop: 8,
     paddingBottom: 24,
   },
   listEmpty: {
+    flex: 1,
+  },
+  placeholderCell: {
     flex: 1,
   },
 });

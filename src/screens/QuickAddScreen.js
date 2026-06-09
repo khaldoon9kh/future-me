@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { storageService } from '../storage/storageService';
 import { notificationService } from '../services/notificationService';
-import { normalizeUrl } from '../utils/urlUtils';
+import { fetchLinkMetadata } from '../services/linkMetadataService';
+import { normalizeUrl, isValidUrl } from '../utils/urlUtils';
 import { formatDateTime } from '../utils/dateUtils';
+import LinkPreviewCard from '../components/LinkPreviewCard';
 
 // Action type options shown in the picker grid
 const ACTION_TYPES = [
@@ -50,6 +52,10 @@ export default function QuickAddScreen() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Link preview state: null | { loading: true } | { title, description, imageUrl }
+  const [preview, setPreview] = useState(null);
+  const fetchTimerRef = useRef(null);
+
   // Edit mode state
   const [editItemId, setEditItemId] = useState(null);
   const isEditMode = !!editItemId;
@@ -68,6 +74,10 @@ export default function QuickAddScreen() {
       if (item.reminderDateTime) setReminderDate(new Date(item.reminderDateTime));
       setRecipientName(item.recipientName || '');
       setNotes(item.notes || '');
+      // Show stored preview data for edit mode (no re-fetch needed)
+      if (item.imageUrl || item.description) {
+        setPreview({ title: item.title, description: item.description || '', imageUrl: item.imageUrl || '' });
+      }
     } else {
       // New item — pre-fill from share intent data if present
       if (params.sharedUrl) setUrl(normalizeUrl(params.sharedUrl));
@@ -75,6 +85,31 @@ export default function QuickAddScreen() {
       if (params.sharedNotes) setNotes(params.sharedNotes);
     }
   }, []);
+
+  // Debounced URL → metadata fetch (600 ms after the user stops typing)
+  useEffect(() => {
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    const normalized = url.trim() ? normalizeUrl(url.trim()) : '';
+    if (!normalized || !isValidUrl(normalized)) {
+      setPreview(null);
+      return;
+    }
+    setPreview({ loading: true });
+    fetchTimerRef.current = setTimeout(async () => {
+      const meta = await fetchLinkMetadata(normalized);
+      setPreview(meta);
+    }, 600);
+    return () => {
+      if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    };
+  }, [url]);
+
+  // Auto-fill title from preview when the title field is still blank
+  useEffect(() => {
+    if (preview && !preview.loading && preview.title && !title.trim() && !isEditMode) {
+      setTitle(preview.title);
+    }
+  }, [preview]);
 
   const handleSave = async () => {
     if (!url.trim() && !title.trim() && !notes.trim()) {
@@ -92,6 +127,8 @@ export default function QuickAddScreen() {
           (actionType === 'reminder' || actionType === 'send_later') ? reminderDate.toISOString() : null,
         recipientName: actionType === 'send_later' ? recipientName.trim() : '',
         notes: notes.trim(),
+        imageUrl: preview && !preview.loading ? (preview.imageUrl || '') : '',
+        description: preview && !preview.loading ? (preview.description || '') : '',
       };
 
       if (isEditMode) {
@@ -202,6 +239,20 @@ export default function QuickAddScreen() {
               />
             </InputRow>
           </Field>
+
+          {/* ── Link Preview ── */}
+          {preview && (
+            <View style={styles.previewWrap}>
+              <LinkPreviewCard
+                preview={preview}
+                url={url}
+                onRetry={() => {
+                  setPreview({ loading: true });
+                  fetchLinkMetadata(normalizeUrl(url.trim())).then(setPreview);
+                }}
+              />
+            </View>
+          )}
 
           {/* ── Title ── */}
           <Field label="Title (optional)">
@@ -570,5 +621,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1A1A2E',
     minHeight: 110,
+  },
+  previewWrap: {
+    marginTop: -8,
+    marginBottom: 16,
   },
 });

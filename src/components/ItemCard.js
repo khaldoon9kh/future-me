@@ -1,30 +1,36 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDateTime, isOverdue, isToday } from '../utils/dateUtils';
-import { extractDomain, detectPlatform, platformIcon } from '../utils/urlUtils';
+import { extractDomain, detectPlatform } from '../utils/urlUtils';
 
-// Visual config per action type
 const ACTION_CONFIG = {
-  reminder: { icon: 'alarm-outline', color: '#F59E0B', label: 'Reminder' },
+  reminder:  { icon: 'alarm-outline', color: '#F59E0B', label: 'Reminder' },
   send_later: { icon: 'paper-plane-outline', color: '#10B981', label: 'Send Later' },
-  other: { icon: 'ellipsis-horizontal-circle-outline', color: '#6B7280', label: 'Other' },
+  other:     { icon: 'ellipsis-horizontal-circle-outline', color: '#6B7280', label: 'Other' },
+};
+
+const PLATFORM_ICONS = {
+  youtube:   'logo-youtube',
+  tiktok:    'musical-notes',
+  instagram: 'logo-instagram',
+  twitter:   'logo-twitter',
+  reddit:    'logo-reddit',
+  vimeo:     'film-outline',
+  link:      'link-outline',
 };
 
 export default function ItemCard({ item, onPress, onComplete }) {
-  const config = ACTION_CONFIG[item.actionType] || ACTION_CONFIG.other;
-  const domain = extractDomain(item.url);
-  const pIcon = platformIcon(detectPlatform(item.url));
+  const [imgError, setImgError] = useState(false);
 
-  const overdue =
-    item.actionType === 'reminder' &&
-    !item.completed &&
-    isOverdue(item.reminderDateTime);
-  const dueToday =
-    item.actionType === 'reminder' &&
-    !item.completed &&
-    !overdue &&
-    isToday(item.reminderDateTime);
+  const config  = ACTION_CONFIG[item.actionType] || ACTION_CONFIG.other;
+  const domain  = extractDomain(item.url);
+  const platform = detectPlatform(item.url);
+  const pIcon   = PLATFORM_ICONS[platform] || PLATFORM_ICONS.link;
+  const hasImage = !!item.imageUrl && !imgError;
+
+  const overdue  = !item.completed && isOverdue(item.reminderDateTime);
+  const dueToday = !item.completed && !overdue && isToday(item.reminderDateTime);
 
   return (
     <TouchableOpacity
@@ -32,30 +38,56 @@ export default function ItemCard({ item, onPress, onComplete }) {
       onPress={onPress}
       activeOpacity={0.75}
     >
-      {/* Left colour accent */}
-      <View style={[styles.accent, { backgroundColor: config.color }]} />
+      {/* ── Image / Placeholder ── */}
+      <View style={styles.imageWrapper}>
+        {hasImage ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <View style={[styles.imagePlaceholder, { backgroundColor: `${config.color}18` }]}>
+            <Ionicons name={pIcon} size={28} color={config.color} style={{ opacity: 0.55 }} />
+          </View>
+        )}
 
+        {/* Status chip — bottom-left of image */}
+        {overdue && (
+          <View style={[styles.imageChip, styles.overdueChip]}>
+            <Text style={styles.overdueChipText}>Overdue</Text>
+          </View>
+        )}
+        {dueToday && (
+          <View style={[styles.imageChip, styles.todayChip]}>
+            <Text style={styles.todayChipText}>Today</Text>
+          </View>
+        )}
+
+        {/* Complete toggle — top-right of image */}
+        <TouchableOpacity
+          style={styles.checkOverlay}
+          onPress={(e) => {
+            e.stopPropagation();
+            if (!item.completed) onComplete();
+          }}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons
+            name={item.completed ? 'checkmark-circle' : 'checkmark-circle-outline'}
+            size={22}
+            color={item.completed ? '#10B981' : '#FFFFFF'}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Body ── */}
       <View style={styles.body}>
-        {/* Row 1: type badge + status tags + platform icon */}
-        <View style={styles.topRow}>
-          <View style={[styles.badge, { backgroundColor: `${config.color}20` }]}>
-            <Ionicons name={config.icon} size={11} color={config.color} />
-            <Text style={[styles.badgeText, { color: config.color }]}>{config.label}</Text>
-          </View>
-
-          <View style={styles.topRight}>
-            {overdue && (
-              <View style={styles.overdueChip}>
-                <Text style={styles.overdueText}>Overdue</Text>
-              </View>
-            )}
-            {dueToday && (
-              <View style={styles.todayChip}>
-                <Text style={styles.todayText}>Today</Text>
-              </View>
-            )}
-            <Ionicons name={pIcon} size={15} color="#C4C9D4" />
-          </View>
+        {/* Action badge */}
+        <View style={[styles.badge, { backgroundColor: `${config.color}18` }]}>
+          <View style={[styles.badgeDot, { backgroundColor: config.color }]} />
+          <Text style={[styles.badgeText, { color: config.color }]}>{config.label}</Text>
         </View>
 
         {/* Title */}
@@ -68,51 +100,18 @@ export default function ItemCard({ item, onPress, onComplete }) {
 
         {/* Domain */}
         {domain ? (
-          <Text style={styles.domain} numberOfLines={1}>
-            {domain}
-          </Text>
+          <Text style={styles.domain} numberOfLines={1}>{domain}</Text>
         ) : null}
 
-        {/* Notes preview */}
-        {item.notes ? (
-          <Text style={styles.notes} numberOfLines={1}>
-            {item.notes}
-          </Text>
-        ) : null}
-
-        {/* Row 3: meta + done button */}
-        <View style={styles.bottomRow}>
-          <View style={styles.metaRow}>
-            {item.reminderDateTime ? (
-              <View style={styles.metaItem}>
-                <Ionicons name="time-outline" size={11} color="#9CA3AF" />
-                <Text style={[styles.metaText, overdue && styles.overdueDate]}>
-                  {formatDateTime(item.reminderDateTime)}
-                </Text>
-              </View>
-            ) : null}
-            {item.recipientName ? (
-              <View style={styles.metaItem}>
-                <Ionicons name="person-outline" size={11} color="#9CA3AF" />
-                <Text style={styles.metaText}>{item.recipientName}</Text>
-              </View>
-            ) : null}
+        {/* Time */}
+        {item.reminderDateTime ? (
+          <View style={styles.timeRow}>
+            <Ionicons name="time-outline" size={10} color={overdue ? '#EF4444' : '#9CA3AF'} />
+            <Text style={[styles.timeText, overdue && styles.overdueDate]}>
+              {formatDateTime(item.reminderDateTime)}
+            </Text>
           </View>
-
-          {item.completed ? (
-            <Ionicons name="checkmark-circle" size={22} color="#10B981" />
-          ) : (
-            <TouchableOpacity
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={(e) => {
-                e.stopPropagation();
-                onComplete();
-              }}
-            >
-              <Ionicons name="checkmark-circle-outline" size={22} color="#10B981" />
-            </TouchableOpacity>
-          )}
-        </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -120,10 +119,9 @@ export default function ItemCard({ item, onPress, onComplete }) {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -134,97 +132,98 @@ const styles = StyleSheet.create({
   completedCard: {
     opacity: 0.55,
   },
-  accent: {
-    width: 4,
+  imageWrapper: {
+    width: '100%',
+    height: 110,
   },
-  body: {
-    flex: 1,
-    padding: 14,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  topRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  overdueChip: {
-    backgroundColor: '#FEE2E2',
+  imageChip: {
+    position: 'absolute',
+    bottom: 6,
+    left: 7,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  overdueText: {
+  overdueChip: {
+    backgroundColor: 'rgba(254,226,226,0.92)',
+  },
+  overdueChipText: {
     color: '#EF4444',
     fontSize: 10,
     fontWeight: '700',
   },
   todayChip: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: 'rgba(254,243,199,0.92)',
   },
-  todayText: {
+  todayChipText: {
     color: '#D97706',
     fontSize: 10,
     fontWeight: '700',
   },
+  checkOverlay: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: 12,
+    padding: 1,
+  },
+  body: {
+    padding: 10,
+    gap: 4,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 20,
+    marginBottom: 2,
+  },
+  badgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   title: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1A1A2E',
-    lineHeight: 21,
-    marginBottom: 3,
+    lineHeight: 18,
   },
   strikethrough: {
     textDecorationLine: 'line-through',
     color: '#9CA3AF',
   },
   domain: {
-    fontSize: 12,
-    color: '#6C63FF',
-    marginBottom: 3,
-  },
-  notes: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontStyle: 'italic',
-    marginBottom: 6,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  metaRow: {
-    flex: 1,
-    gap: 6,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
     fontSize: 11,
+    color: '#6C63FF',
+    fontWeight: '500',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  timeText: {
+    fontSize: 10,
     color: '#9CA3AF',
   },
   overdueDate: {

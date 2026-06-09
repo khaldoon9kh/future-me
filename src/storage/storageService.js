@@ -31,6 +31,8 @@ const storageService = {
         notificationId: item.notificationId ?? null,
         recipientName: item.recipientName ?? '',
         notes: item.notes ?? '',
+        imageUrl: item.imageUrl ?? '',
+        description: item.description ?? '',
         createdAt: new Date().toISOString(),
         completed: false,
       };
