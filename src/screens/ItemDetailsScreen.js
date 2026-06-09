@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 
 import { storageService } from '../storage/storageService';
 import { notificationService } from '../services/notificationService';
@@ -30,14 +30,14 @@ export default function ItemDetailsScreen() {
 
   const [item, setItem] = useState(null);
 
-  useEffect(() => {
-    loadItem();
-  }, []);
-
-  const loadItem = async () => {
+  const loadItem = useCallback(async () => {
     const all = await storageService.getAllItems();
     setItem(all.find((i) => i.id === itemId) ?? null);
-  };
+  }, [itemId]);
+
+  // Reload every time this screen gains focus so edits made in QuickAdd
+  // (or completions made elsewhere) are immediately reflected here.
+  useFocusEffect(loadItem);
 
   const handleEdit = () => {
     navigation.navigate('QuickAdd', {
