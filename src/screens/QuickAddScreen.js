@@ -396,10 +396,20 @@ function InputRow({ icon, children }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? 24 : 0,
   },
   flex: {
     flex: 1,
+    paddingTop: 8,
+    marginTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 5,
   },
   header: {
     flexDirection: 'row',
