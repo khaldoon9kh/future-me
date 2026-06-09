@@ -140,12 +140,21 @@ export default function QuickAddScreen() {
           await notificationService.cancelReminder(existing.notificationId);
         }
 
-        // Save with notificationId cleared — we'll set a new one below if needed.
-        await storageService.updateItem(editItemId, { ...payload, notificationId: null });
+        const isFuture =
+          (actionType === 'reminder' || actionType === 'send_later') &&
+          reminderDate > new Date();
 
-        // Re-schedule if this is still a timed action and the date is in the future.
-        if ((actionType === 'reminder' || actionType === 'send_later') && reminderDate > new Date()) {
-          const updatedItem = { ...existing, ...payload, id: editItemId };
+        // Auto-clear completed when the user reschedules to a future time
+        // so the item re-enters the active inbox.
+        await storageService.updateItem(editItemId, {
+          ...payload,
+          notificationId: null,
+          ...(isFuture && { completed: false }),
+        });
+
+        // Re-schedule notification for future-dated timed actions.
+        if (isFuture) {
+          const updatedItem = { ...existing, ...payload, id: editItemId, completed: false };
           const notifId = await notificationService.scheduleReminder(updatedItem);
           if (notifId) {
             await storageService.updateItem(editItemId, { notificationId: notifId });

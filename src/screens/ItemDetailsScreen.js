@@ -30,14 +30,17 @@ export default function ItemDetailsScreen() {
 
   const [item, setItem] = useState(null);
 
-  const loadItem = useCallback(async () => {
-    const all = await storageService.getAllItems();
-    setItem(all.find((i) => i.id === itemId) ?? null);
-  }, [itemId]);
-
   // Reload every time this screen gains focus so edits made in QuickAdd
   // (or completions made elsewhere) are immediately reflected here.
-  useFocusEffect(loadItem);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      storageService.getAllItems().then((all) => {
+        if (!cancelled) setItem(all.find((i) => i.id === itemId) ?? null);
+      });
+      return () => { cancelled = true; };
+    }, [itemId])
+  );
 
   const handleEdit = () => {
     navigation.navigate('QuickAdd', {
