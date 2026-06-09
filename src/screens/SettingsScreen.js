@@ -183,7 +183,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.infoCard}>
+        {/*<View style={styles.infoCard}>
           <Ionicons name="construct-outline" size={22} color="#F59E0B" />
           <View style={styles.infoText}>
             <Text style={styles.infoTitle}>Requires a custom build</Text>
@@ -193,6 +193,7 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </View>
+        */}
 
         {/* About */}
         <SectionHeader title="About" />
