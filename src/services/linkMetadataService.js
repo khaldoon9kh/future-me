@@ -13,10 +13,11 @@ const CRAWLER_UA =
 
 const EMPTY = { title: '', description: '', imageUrl: '' };
 
-// oEmbed endpoints that work without authentication
+// oEmbed endpoints that work without authentication.
+// (TikTok's oEmbed now returns only an iframe — no title or thumbnail —
+// so TikTok is handled by tryTikTok below instead.)
 const OEMBED_ENDPOINTS = {
   youtube: 'https://www.youtube.com/oembed',
-  tiktok:  'https://www.tiktok.com/oembed',
   vimeo:   'https://vimeo.com/api/oembed.json',
   twitter: 'https://publish.twitter.com/oembed',
 };
@@ -245,14 +246,41 @@ async function tryInstagram(url) {
   return meta.title || meta.imageUrl ? meta : null;
 }
 
+// ── TikTok ───────────────────────────────────────────────────────────────────
+
+// Matches /@user/video/ID and /@user/photo/ID
+const TIKTOK_POST = /tiktok\.com\/@[^/?#]+\/(?:video|photo)\/\d+/i;
+
+async function tryTikTok(url) {
+  // Like Instagram, TikTok serves a JS-only shell to browsers but full OG
+  // tags to Facebook's crawler. Short vt./vm.tiktok.com links redirect to the
+  // post; fetch follows that.
+  const page = await fetchHtml(url, CRAWLER_UA);
+  if (!page) return null;
+
+  // Dead or expired short links redirect to the homepage, whose generic
+  // "TikTok - Make Your Day" tags would be a misleading preview.
+  if (!TIKTOK_POST.test(page.finalUrl) && !TIKTOK_POST.test(url)) return null;
+
+  const og = parseHtml(page.html);
+  // og:title comes back as "TikTok · Author Name"
+  const author = og.title.replace(/^TikTok\s*·\s*/i, '').trim();
+  return {
+    title:       author ? `${author} on TikTok` : og.title,
+    description: og.description,
+    imageUrl:    og.imageUrl,
+  };
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Fetches title, description, and imageUrl for any URL.
  *
  * Strategy (per platform):
- *   YouTube / TikTok / Vimeo / Twitter  →  oEmbed API (no auth needed)
+ *   YouTube / Vimeo / Twitter           →  oEmbed API (no auth needed)
  *   Instagram                           →  OG tags via crawler UA, then public embed page
+ *   TikTok                              →  OG tags via crawler UA
  *   Reddit / all others                 →  fetch HTML and parse OG/Twitter-card tags
  *
  * Always resolves — never rejects. Returns empty strings on any failure.
@@ -267,6 +295,12 @@ export async function fetchLinkMetadata(rawUrl) {
     if (platform === 'instagram') {
       const ig = await tryInstagram(url);
       if (ig) return ig;
+    }
+
+    if (platform === 'tiktok') {
+      // The generic fallback only ever sees TikTok's homepage shell
+      const tt = await tryTikTok(url);
+      return tt && (tt.title || tt.imageUrl) ? tt : EMPTY;
     }
 
     // Try oEmbed first for supported platforms

@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -14,8 +15,9 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 
 import { storageService } from '../storage/storageService';
 import { notificationService } from '../services/notificationService';
-import { formatDateTime, relativeLabel, isOverdue } from '../utils/dateUtils';
-import { extractDomain } from '../utils/urlUtils';
+import { refreshItemPreview } from '../services/previewRefreshService';
+import { formatDateTime, isOverdue } from '../utils/dateUtils';
+import { extractDomain, normalizeUrl } from '../utils/urlUtils';
 
 const ACTION_CONFIG = {
   reminder: { icon: 'alarm', color: '#F59E0B', label: 'Reminder' },
@@ -30,6 +32,10 @@ export default function ItemDetailsScreen() {
 
   const [item, setItem] = useState(null);
   const [lists, setLists] = useState([]);
+  const [imgError, setImgError] = useState(false);
+
+  // A refreshed thumbnail URL gets a fresh chance to load
+  useEffect(() => setImgError(false), [item?.imageUrl]);
 
   // Reload every time this screen gains focus so edits made in QuickAdd
   // (or completions made elsewhere) are immediately reflected here.
@@ -77,15 +83,13 @@ export default function ItemDetailsScreen() {
 
   const handleOpenLink = async () => {
     if (!item?.url) return;
+    // Skip canOpenURL: on Android 11+ (and some OEM ROMs) it reports false for
+    // ordinary https links due to package-visibility rules. openURL rejects
+    // if nothing can handle the URL, so the catch covers that case.
     try {
-      const supported = await Linking.canOpenURL(item.url);
-      if (supported) {
-        await Linking.openURL(item.url);
-      } else {
-        Alert.alert('Cannot open link', 'The URL appears to be invalid.');
-      }
+      await Linking.openURL(normalizeUrl(item.url));
     } catch {
-      Alert.alert('Error', 'Failed to open the link.');
+      Alert.alert('Cannot open link', 'No app on this device could open this link.');
     }
   };
 
@@ -119,6 +123,22 @@ export default function ItemDetailsScreen() {
 
       {/* ── Scrollable content ── */}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Hero image → tappable. Social CDN thumbnails expire, so a failed
+            load triggers one re-fetch of the preview (same as ItemCard). */}
+        {item.imageUrl && !imgError ? (
+          <TouchableOpacity onPress={handleOpenLink} activeOpacity={0.85}>
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.heroImage}
+              resizeMode="cover"
+              onError={() => {
+                setImgError(true);
+                refreshItemPreview(item).then((u) => u && setItem(u));
+              }}
+            />
+          </TouchableOpacity>
+        ) : null}
+
         {/* Type badge */}
         <View style={[styles.typeBadge, { backgroundColor: `${config.color}15` }]}>
           <Ionicons name={config.icon} size={16} color={config.color} />
@@ -135,7 +155,7 @@ export default function ItemDetailsScreen() {
           <View style={styles.overdueWarning}>
             <Ionicons name="warning-outline" size={16} color="#EF4444" />
             <Text style={styles.overdueWarningText}>
-              This reminder was due {relativeLabel(item.reminderDateTime)}.
+              This reminder was due {formatDateTime(item.reminderDateTime)}.
             </Text>
           </View>
         )}
@@ -149,6 +169,13 @@ export default function ItemDetailsScreen() {
             </Text>
             <Ionicons name="open-outline" size={18} color="#6C63FF" />
           </TouchableOpacity>
+        ) : null}
+
+        {/* Post caption / description from the link preview */}
+        {item.description ? (
+          <Text style={styles.description} numberOfLines={6}>
+            {item.description}
+          </Text>
         ) : null}
 
         {/* Details card */}
@@ -306,6 +333,19 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 110,
+  },
+  heroImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  description: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 21,
+    marginBottom: 14,
   },
   typeBadge: {
     flexDirection: 'row',
