@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ITEMS_KEY = '@future_me:items';
+const LISTS_KEY = '@future_me:lists';
 
 /** Generates a simple unique ID without an external library */
 const generateId = () =>
@@ -11,13 +12,16 @@ const generateId = () =>
  * Every write goes through this, so a failed read can never cause the
  * saved list to be overwritten with an empty one.
  */
-async function readItems() {
-  const json = await AsyncStorage.getItem(ITEMS_KEY);
+async function readArray(key) {
+  const json = await AsyncStorage.getItem(key);
   if (!json) return [];
-  const items = JSON.parse(json);
-  if (!Array.isArray(items)) throw new Error('Stored items are not a list');
-  return items;
+  const data = JSON.parse(json);
+  if (!Array.isArray(data)) throw new Error(`Stored value for ${key} is not a list`);
+  return data;
 }
+
+const readItems = () => readArray(ITEMS_KEY);
+const readLists = () => readArray(LISTS_KEY);
 
 // Writes are read-modify-write on one key, so run them one at a time —
 // otherwise a background preview refresh could undo a concurrent edit.
@@ -55,6 +59,7 @@ const storageService = {
           notes: item.notes ?? '',
           imageUrl: item.imageUrl ?? '',
           description: item.description ?? '',
+          listIds: item.listIds ?? [],
           createdAt: new Date().toISOString(),
           completed: false,
         };
@@ -103,6 +108,76 @@ const storageService = {
   /** Convenience: marks an item as completed. */
   async markCompleted(id) {
     return this.updateItem(id, { completed: true });
+  },
+
+  // ── Lists (user-made tags like "Games" or "Music") ──
+  // Items reference lists by id in `item.listIds`. Items saved before lists
+  // existed have no `listIds` field and are treated as being in no list.
+
+  /** Returns all lists in the order they were created. */
+  async getAllLists() {
+    try {
+      return await readLists();
+    } catch (e) {
+      console.error('[storage] getAllLists failed:', e);
+      return [];
+    }
+  },
+
+  /** Creates a list and returns it. */
+  createList({ name, color, icon }) {
+    return serialized(async () => {
+      try {
+        const lists = await readLists();
+        const newList = {
+          id: generateId(),
+          name: name.trim(),
+          color,
+          icon,
+          createdAt: new Date().toISOString(),
+        };
+        await AsyncStorage.setItem(LISTS_KEY, JSON.stringify([...lists, newList]));
+        return newList;
+      } catch (e) {
+        console.error('[storage] createList failed:', e);
+        throw e;
+      }
+    });
+  },
+
+  /** Merges `updates` (name/color/icon) into the list with the given `id`. */
+  updateList(id, updates) {
+    return serialized(async () => {
+      try {
+        const lists = await readLists();
+        const idx = lists.findIndex((l) => l.id === id);
+        if (idx === -1) throw new Error(`List ${id} not found`);
+        lists[idx] = { ...lists[idx], ...updates };
+        await AsyncStorage.setItem(LISTS_KEY, JSON.stringify(lists));
+        return lists[idx];
+      } catch (e) {
+        console.error('[storage] updateList failed:', e);
+        throw e;
+      }
+    });
+  },
+
+  /** Deletes a list. Its posts are kept — only the tag is removed from them. */
+  deleteList(id) {
+    return serialized(async () => {
+      try {
+        const lists = await readLists();
+        const items = await readItems();
+        const untagged = items.map((i) =>
+          i.listIds?.includes(id) ? { ...i, listIds: i.listIds.filter((l) => l !== id) } : i
+        );
+        await AsyncStorage.setItem(ITEMS_KEY, JSON.stringify(untagged));
+        await AsyncStorage.setItem(LISTS_KEY, JSON.stringify(lists.filter((l) => l.id !== id)));
+      } catch (e) {
+        console.error('[storage] deleteList failed:', e);
+        throw e;
+      }
+    });
   },
 
   /** Removes all stored items (used in Settings → Clear All). */

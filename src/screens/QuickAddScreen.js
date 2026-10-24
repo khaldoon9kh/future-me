@@ -22,6 +22,8 @@ import { fetchLinkMetadata } from '../services/linkMetadataService';
 import { normalizeUrl, isValidUrl } from '../utils/urlUtils';
 import { formatDateTime } from '../utils/dateUtils';
 import LinkPreviewCard from '../components/LinkPreviewCard';
+import ListPicker from '../components/ListPicker';
+import ListEditorModal from '../components/ListEditorModal';
 
 // Action type options shown in the picker grid
 const ACTION_TYPES = [
@@ -51,6 +53,9 @@ export default function QuickAddScreen() {
   const [recipientName, setRecipientName] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [listIds, setListIds] = useState([]);
+  const [lists, setLists] = useState([]);
+  const [showListEditor, setShowListEditor] = useState(false);
 
   // Link preview state: null | { loading: true } | { title, description, imageUrl }
   const [preview, setPreview] = useState(null);
@@ -61,6 +66,10 @@ export default function QuickAddScreen() {
   const isEditMode = !!editItemId;
 
   // Pre-fill the form when receiving shared content or editing an existing item
+  useEffect(() => {
+    storageService.getAllLists().then(setLists);
+  }, []);
+
   useEffect(() => {
     const params = route.params || {};
 
@@ -74,6 +83,7 @@ export default function QuickAddScreen() {
       if (item.reminderDateTime) setReminderDate(new Date(item.reminderDateTime));
       setRecipientName(item.recipientName || '');
       setNotes(item.notes || '');
+      setListIds(item.listIds || []);
       // Show stored preview data for edit mode (no re-fetch needed)
       if (item.imageUrl || item.description) {
         setPreview({ title: item.title, description: item.description || '', imageUrl: item.imageUrl || '' });
@@ -129,6 +139,7 @@ export default function QuickAddScreen() {
         notes: notes.trim(),
         imageUrl: preview && !preview.loading ? (preview.imageUrl || '') : '',
         description: preview && !preview.loading ? (preview.description || '') : '',
+        listIds,
       };
 
       if (isEditMode) {
@@ -275,6 +286,16 @@ export default function QuickAddScreen() {
                 returnKeyType="next"
               />
             </InputRow>
+          </Field>
+
+          {/* ── Lists ── */}
+          <Field label="Lists">
+            <ListPicker
+              lists={lists}
+              selectedIds={listIds}
+              onChange={setListIds}
+              onCreateList={() => setShowListEditor(true)}
+            />
           </Field>
 
           {/* ── Action type grid ── */}
@@ -445,6 +466,18 @@ export default function QuickAddScreen() {
           </Field>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ListEditorModal
+        visible={showListEditor}
+        list={null}
+        lists={lists}
+        onClose={() => setShowListEditor(false)}
+        onSaved={(newList) => {
+          // A list created from here is selected straight away
+          setLists((prev) => [...prev, newList]);
+          setListIds((prev) => [...prev, newList.id]);
+        }}
+      />
     </SafeAreaView>
   );
 }

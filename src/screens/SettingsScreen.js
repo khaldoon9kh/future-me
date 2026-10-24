@@ -15,10 +15,15 @@ import * as Notifications from 'expo-notifications';
 
 import { notificationService } from '../services/notificationService';
 import { storageService } from '../storage/storageService';
+import ListEditorModal from '../components/ListEditorModal';
 
 export default function SettingsScreen() {
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [stats, setStats] = useState({ total: 0, active: 0, completed: 0, reminders: 0 });
+  const [lists, setLists] = useState([]);
+  const [listCounts, setListCounts] = useState({});
+  // null = closed, { list: null } = creating, { list } = editing
+  const [listEditor, setListEditor] = useState(null);
 
   const loadData = async () => {
     const { status } = await Notifications.getPermissionsAsync();
@@ -31,6 +36,14 @@ export default function SettingsScreen() {
       completed: items.filter((i) => i.completed).length,
       reminders: items.filter((i) => i.actionType === 'reminder' && !i.completed).length,
     });
+
+    const savedLists = await storageService.getAllLists();
+    setLists(savedLists);
+    setListCounts(
+      Object.fromEntries(
+        savedLists.map((l) => [l.id, items.filter((i) => i.listIds?.includes(l.id)).length])
+      )
+    );
   };
 
   useFocusEffect(
@@ -146,6 +159,32 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* Lists */}
+        <SectionHeader title="Lists" />
+        <View style={styles.card}>
+          {lists.map((list) => (
+            <React.Fragment key={list.id}>
+              <SettingRow
+                icon={list.icon}
+                iconColor={list.color}
+                label={list.name}
+                subtitle={`${listCounts[list.id] ?? 0} post${listCounts[list.id] === 1 ? '' : 's'}`}
+                right={<Ionicons name="create-outline" size={18} color="#D1D5DB" />}
+                onPress={() => setListEditor({ list })}
+              />
+              <View style={styles.divider} />
+            </React.Fragment>
+          ))}
+          <SettingRow
+            icon="add"
+            iconColor="#6C63FF"
+            label="New List"
+            subtitle="Group posts from any app, e.g. Games or Music"
+            labelColor="#6C63FF"
+            onPress={() => setListEditor({ list: null })}
+          />
+        </View>
+
         {/* Data management */}
         <SectionHeader title="Data" />
         <View style={styles.card}>
@@ -207,6 +246,15 @@ export default function SettingsScreen() {
           />
         </View>
       </ScrollView>
+
+      <ListEditorModal
+        visible={!!listEditor}
+        list={listEditor?.list ?? null}
+        lists={lists}
+        onClose={() => setListEditor(null)}
+        onSaved={loadData}
+        onDeleted={loadData}
+      />
     </SafeAreaView>
   );
 }

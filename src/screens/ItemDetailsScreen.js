@@ -29,15 +29,20 @@ export default function ItemDetailsScreen() {
   const { itemId } = route.params;
 
   const [item, setItem] = useState(null);
+  const [lists, setLists] = useState([]);
 
   // Reload every time this screen gains focus so edits made in QuickAdd
   // (or completions made elsewhere) are immediately reflected here.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      storageService.getAllItems().then((all) => {
-        if (!cancelled) setItem(all.find((i) => i.id === itemId) ?? null);
-      });
+      Promise.all([storageService.getAllItems(), storageService.getAllLists()]).then(
+        ([all, savedLists]) => {
+          if (cancelled) return;
+          setItem(all.find((i) => i.id === itemId) ?? null);
+          setLists(savedLists);
+        }
+      );
       return () => { cancelled = true; };
     }, [itemId])
   );
@@ -91,6 +96,7 @@ export default function ItemDetailsScreen() {
   if (!item) return null;
 
   const config = ACTION_CONFIG[item.actionType] || ACTION_CONFIG.other;
+  const itemLists = lists.filter((l) => item.listIds?.includes(l.id));
   const overdue =
     item.actionType === 'reminder' && !item.completed && isOverdue(item.reminderDateTime);
 
@@ -171,6 +177,23 @@ export default function ItemDetailsScreen() {
             last
           />
         </View>
+
+        {/* Lists — tap to change them in the editor */}
+        <TouchableOpacity style={styles.listsCard} onPress={handleEdit} activeOpacity={0.75}>
+          <Text style={styles.notesLabel}>Lists</Text>
+          {itemLists.length > 0 ? (
+            <View style={styles.listChips}>
+              {itemLists.map((l) => (
+                <View key={l.id} style={[styles.listChip, { backgroundColor: `${l.color}15` }]}>
+                  <Ionicons name={l.icon} size={13} color={l.color} />
+                  <Text style={[styles.listChipText, { color: l.color }]}>{l.name}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.listsEmpty}>Not in any list — tap to add</Text>
+          )}
+        </TouchableOpacity>
 
         {/* Notes */}
         {item.notes ? (
@@ -348,6 +371,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 1,
+  },
+  listsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  listChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  listChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  listChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  listsEmpty: {
+    fontSize: 14,
+    color: '#9CA3AF',
   },
   notesCard: {
     backgroundColor: '#FFFFFF',

@@ -18,6 +18,8 @@ import { refreshMissingPreviews, refreshItemPreview } from '../services/previewR
 import ItemCard from '../components/ItemCard';
 import FilterTabs from '../components/FilterTabs';
 import PlatformFilter from '../components/PlatformFilter';
+import ListFilter from '../components/ListFilter';
+import ListEditorModal from '../components/ListEditorModal';
 import EmptyState from '../components/EmptyState';
 
 const FILTER_OPTIONS = [
@@ -57,14 +59,24 @@ export default function HomeScreen() {
   const [items, setItems] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [activePlatform, setActivePlatform] = useState('all');
+  const [lists, setLists] = useState([]);
+  const [activeList, setActiveList] = useState('all');
+  // null = closed, { list: null } = creating, { list } = editing
+  const [listEditor, setListEditor] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const replaceItem = (updated) =>
     setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
 
   const loadItems = async () => {
-    const data = await storageService.getAllItems();
+    const [data, savedLists] = await Promise.all([
+      storageService.getAllItems(),
+      storageService.getAllLists(),
+    ]);
     setItems(data);
+    setLists(savedLists);
+    // The selected list may have been deleted from another screen
+    setActiveList((cur) => (cur === 'all' || savedLists.some((l) => l.id === cur) ? cur : 'all'));
     return data;
   };
 
@@ -89,10 +101,15 @@ export default function HomeScreen() {
       ? items
       : items.filter((i) => detectPlatform(i.url) === activePlatform);
 
+  const listFiltered =
+    activeList === 'all'
+      ? platformFiltered
+      : platformFiltered.filter((i) => i.listIds?.includes(activeList));
+
   const filtered =
     activeFilter === 'all'
-      ? platformFiltered
-      : platformFiltered.filter((i) => i.actionType === activeFilter);
+      ? listFiltered
+      : listFiltered.filter((i) => i.actionType === activeFilter);
 
   // Active items first, completed at the bottom
   const sortedBase = [
@@ -110,7 +127,14 @@ export default function HomeScreen() {
     pending: items.filter((i) => !i.completed).length,
   };
 
-  const empty = EMPTY_MESSAGES[activeFilter] || EMPTY_MESSAGES.all;
+  const selectedList = lists.find((l) => l.id === activeList);
+  const empty = selectedList
+    ? {
+        icon: selectedList.icon,
+        title: `Nothing in ${selectedList.name} yet`,
+        subtitle: 'Edit any post and tap this list to add it here.',
+      }
+    : EMPTY_MESSAGES[activeFilter] || EMPTY_MESSAGES.all;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -152,6 +176,16 @@ export default function HomeScreen() {
         onPlatformChange={setActivePlatform}
       />
 
+      {/* ── User lists (tags) ── */}
+      <ListFilter
+        lists={lists}
+        items={items}
+        activeList={activeList}
+        onListChange={setActiveList}
+        onEditList={(list) => setListEditor({ list })}
+        onCreateList={() => setListEditor({ list: null })}
+      />
+
       {/* ── Action-type filter tabs ── */}
       <FilterTabs
         options={FILTER_OPTIONS}
@@ -186,6 +220,7 @@ export default function HomeScreen() {
           return (
             <ItemCard
               item={item}
+              lists={lists}
               onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
               onComplete={async () => {
                 await storageService.updateItem(item.id, { completed: !item.completed });
@@ -195,6 +230,18 @@ export default function HomeScreen() {
               onImageError={() => refreshItemPreview(item).then((u) => u && replaceItem(u))}
             />
           );
+        }}
+      />
+
+      <ListEditorModal
+        visible={!!listEditor}
+        list={listEditor?.list ?? null}
+        lists={lists}
+        onClose={() => setListEditor(null)}
+        onSaved={loadItems}
+        onDeleted={(id) => {
+          if (activeList === id) setActiveList('all');
+          loadItems();
         }}
       />
     </SafeAreaView>

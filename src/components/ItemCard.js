@@ -20,7 +20,7 @@ const PLATFORM_ICONS = {
   link:      'link-outline',
 };
 
-export default function ItemCard({ item, onPress, onComplete, onImageError }) {
+export default function ItemCard({ item, lists = [], onPress, onComplete, onImageError }) {
   const [imgError, setImgError] = useState(false);
 
   // A refreshed thumbnail URL gets a fresh chance to load
@@ -31,6 +31,7 @@ export default function ItemCard({ item, onPress, onComplete, onImageError }) {
   const platform = detectPlatform(item.url);
   const pIcon   = PLATFORM_ICONS[platform] || PLATFORM_ICONS.link;
   const hasImage = !!item.imageUrl && !imgError;
+  const itemLists = lists.filter((l) => item.listIds?.includes(l.id));
 
   const overdue  = !item.completed && isOverdue(item.reminderDateTime);
   const dueToday = !item.completed && !overdue && isToday(item.reminderDateTime);
@@ -118,6 +119,20 @@ export default function ItemCard({ item, onPress, onComplete, onImageError }) {
             </Text>
           </View>
         ) : null}
+
+        {/* Lists */}
+        {itemLists.length > 0 ? (
+          <View style={styles.listRow}>
+            {itemLists.map((l) => (
+              <View key={l.id} style={[styles.listTag, { backgroundColor: `${l.color}15` }]}>
+                <Ionicons name={l.icon} size={9} color={l.color} />
+                <Text style={[styles.listTagText, { color: l.color }]} numberOfLines={1}>
+                  {l.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -187,6 +202,26 @@ const styles = StyleSheet.create({
   body: {
     padding: 10,
     gap: 4,
+  },
+  listRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 2,
+  },
+  listTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    maxWidth: '100%',
+  },
+  listTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    flexShrink: 1,
   },
   badge: {
     alignSelf: 'flex-start',

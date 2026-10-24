@@ -211,6 +211,9 @@ Each saved item is stored as a JSON object in AsyncStorage:
   notificationId: string | null,    // expo-notifications scheduled ID
   recipientName: string,   // only for 'send_later'
   notes: string,           // free-form private note
+  imageUrl: string,        // preview thumbnail
+  description: string,     // preview description
+  listIds: string[],       // ids of the user lists this item is in (missing on older items = none)
   createdAt: string,       // ISO 8601 creation timestamp
   completed: boolean,      // whether the item has been acted on
 }
@@ -218,12 +221,22 @@ Each saved item is stored as a JSON object in AsyncStorage:
 
 All items are stored under the AsyncStorage key `@future_me:items` as a JSON array, newest first.
 
+User lists (tags such as "Games" or "Music") are stored separately under `@future_me:lists`:
+
+```js
+{ id: string, name: string, color: string, icon: string, createdAt: string }
+```
+
+Deleting a list removes its id from every item's `listIds`; the items themselves are kept.
+
 ---
 
 ## Screens overview
 
 ### Home (Inbox)
 - Displays all saved items with filter tabs (All / Reminders / Send Later / Other)
+- Platform chips (YouTube, Instagram, …) and list chips filter the grid; filters combine
+- Tap **New** in the list row to create a list, long-press a list chip to rename, recolor or delete it
 - Active items appear above completed items
 - Tap **+** to manually add an item
 - Pull to refresh
