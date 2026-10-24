@@ -14,6 +14,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 import { storageService } from '../storage/storageService';
 import { detectPlatform } from '../utils/urlUtils';
+import { refreshMissingPreviews, refreshItemPreview } from '../services/previewRefreshService';
 import ItemCard from '../components/ItemCard';
 import FilterTabs from '../components/FilterTabs';
 import PlatformFilter from '../components/PlatformFilter';
@@ -58,15 +59,21 @@ export default function HomeScreen() {
   const [activePlatform, setActivePlatform] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
 
+  const replaceItem = (updated) =>
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+
   const loadItems = async () => {
     const data = await storageService.getAllItems();
     setItems(data);
+    return data;
   };
 
   // Reload every time this screen comes into focus (e.g. after saving a new item)
   useFocusEffect(
     useCallback(() => {
-      loadItems();
+      // Fill in previews for saved links that don't have one yet (e.g.
+      // Instagram posts saved before previews worked). Runs in the background.
+      loadItems().then((data) => refreshMissingPreviews(data, replaceItem));
     }, [])
   );
 
@@ -184,6 +191,8 @@ export default function HomeScreen() {
                 await storageService.updateItem(item.id, { completed: !item.completed });
                 loadItems();
               }}
+              // Instagram/TikTok thumbnail URLs expire — fetch a fresh one
+              onImageError={() => refreshItemPreview(item).then((u) => u && replaceItem(u))}
             />
           );
         }}

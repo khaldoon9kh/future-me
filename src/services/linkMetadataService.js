@@ -2,6 +2,17 @@ import { normalizeUrl, detectPlatform } from '../utils/urlUtils';
 
 const TIMEOUT_MS = 7000;
 
+const MOBILE_UA =
+  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+
+// Instagram serves a login wall (no OG tags) to normal browsers, but still
+// serves full OG tags to Facebook's link-preview crawler.
+const CRAWLER_UA =
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
+
+const EMPTY = { title: '', description: '', imageUrl: '' };
+
 // oEmbed endpoints that work without authentication
 const OEMBED_ENDPOINTS = {
   youtube: 'https://www.youtube.com/oembed',
@@ -37,23 +48,28 @@ function decodeEntities(str) {
  * property/name=`key`, handling both attribute orderings.
  */
 function extractMeta(html, key, attrType = 'property') {
+  // Match the value inside its own quote type so apostrophes in a
+  // double-quoted value (e.g. "Don't miss this") don't cut it short.
+  const val = `(?:"([^"]{1,2000})"|'([^']{1,2000})')`;
   // attr before content
   const p1 = new RegExp(
-    `${attrType}=["']${key}["'][^>]*content=["']([^"']{1,2000})["']`,
+    `<meta[^>]*?${attrType}=["']${key}["'][^>]*?content=${val}`,
     'i'
   );
   // content before attr
   const p2 = new RegExp(
-    `content=["']([^"']{1,2000})["'][^>]*${attrType}=["']${key}["']`,
+    `<meta[^>]*?content=${val}[^>]*?${attrType}=["']${key}["']`,
     'i'
   );
   const m = html.match(p1) || html.match(p2);
-  return m ? decodeEntities(m[1]) : '';
+  return m ? decodeEntities(m[1] ?? m[2]) : '';
 }
 
 function parseHtml(html) {
-  // Limit parsing to first 60 kB — avoids huge script blobs after <head>
-  const head = html.slice(0, 60000);
+  // Only parse <head>. Some sites (Instagram) put 100 kB+ of inline scripts
+  // before their meta tags, so a fixed byte cut-off misses them.
+  const headEnd = html.indexOf('</head>');
+  const head = html.slice(0, headEnd > 0 ? headEnd : 500000);
 
   const title =
     extractMeta(head, 'og:title') ||
@@ -124,31 +140,109 @@ async function tryOEmbed(platform, url) {
 
 // ── Open Graph fallback ──────────────────────────────────────────────────────
 
-async function tryOpenGraph(url) {
+async function fetchHtml(url, userAgent = MOBILE_UA) {
   const { signal, clear } = withTimeout(TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       signal,
       headers: {
-        // Present as a mobile browser so sites serve full meta tags
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent': userAgent,
         Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
-    clear();
     if (!res.ok) return null;
 
     const ct = res.headers.get('content-type') || '';
     if (!ct.includes('text/html') && !ct.includes('application/xhtml')) return null;
 
-    const text = await res.text();
-    return parseHtml(text);
+    const html = await res.text();
+    return { html, finalUrl: res.url || url };
   } catch {
-    clear();
     return null;
+  } finally {
+    clear();
   }
+}
+
+async function tryOpenGraph(url, userAgent) {
+  const page = await fetchHtml(url, userAgent);
+  return page ? parseHtml(page.html) : null;
+}
+
+// ── Instagram ────────────────────────────────────────────────────────────────
+
+// Matches /p/CODE, /reel/CODE, /reels/CODE, /tv/CODE and /username/p/CODE
+const IG_SHORTCODE = /instagram\.com\/(?:[^/?#]+\/)?(?:p|reels?|tv)\/([A-Za-z0-9_-]+)/i;
+
+function instagramShortcode(url) {
+  const m = (url || '').match(IG_SHORTCODE);
+  return m ? m[1] : '';
+}
+
+/** Login walls and error pages come back with a bare "Instagram" title and no image. */
+function isUsefulInstagramMeta(meta) {
+  if (!meta) return false;
+  if (meta.imageUrl) return true;
+  return !!meta.title && !/^(?:login\s*•\s*)?instagram$/i.test(meta.title.trim());
+}
+
+/** Parses the public embed page (instagram.com/p/CODE/embed/captioned/). */
+function parseInstagramEmbed(html) {
+  const imgTag = html.match(/<img[^>]*class="[^"]*EmbeddedMediaImage[^"]*"[^>]*>/i);
+  const src = imgTag && imgTag[0].match(/\ssrc="([^"]+)"/i);
+  let imageUrl = src ? decodeEntities(src[1]) : '';
+  if (!imageUrl) {
+    // Video posts keep the poster image in embedded JSON instead of an <img>
+    const json = html.match(/"display_url"\s*:\s*"([^"]+)"/);
+    if (json) imageUrl = json[1].replace(/\\\//g, '/').replace(/\\u0026/g, '&');
+  }
+
+  const userMatch = html.match(/class="[^"]*UsernameText[^"]*"[^>]*>([^<]{1,100})</i);
+  const username = userMatch ? decodeEntities(userMatch[1]) : '';
+
+  let caption = '';
+  const capMatch = html.match(/<div[^>]*class="[^"]*Caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+  if (capMatch) {
+    caption = decodeEntities(
+      capMatch[1]
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+    );
+    // The caption block starts with the username — drop the duplicate
+    if (username && caption.startsWith(username)) {
+      caption = caption.slice(username.length).trim();
+    }
+  }
+
+  return {
+    title:       (username ? `${username} on Instagram` : '').slice(0, 200),
+    description: caption.slice(0, 400),
+    imageUrl,
+  };
+}
+
+async function tryInstagram(url) {
+  // Drop share-tracking params (?igsh=…, ?utm_source=…) — they add nothing
+  const clean = url.split(/[?#]/)[0];
+
+  // 1. The page itself, requested as Facebook's crawler
+  const page = await fetchHtml(clean, CRAWLER_UA);
+  if (page) {
+    const og = parseHtml(page.html);
+    if (isUsefulInstagramMeta(og)) return og;
+  }
+
+  // 2. The public embed page. Short /share/ links only reveal the shortcode
+  //    after redirecting, so check the final URL too.
+  const code = instagramShortcode(page?.finalUrl) || instagramShortcode(clean);
+  if (!code) return null;
+
+  const embed = await fetchHtml(`https://www.instagram.com/p/${code}/embed/captioned/`);
+  if (!embed) return null;
+  const meta = parseInstagramEmbed(embed.html);
+  return meta.title || meta.imageUrl ? meta : null;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -158,16 +252,22 @@ async function tryOpenGraph(url) {
  *
  * Strategy (per platform):
  *   YouTube / TikTok / Vimeo / Twitter  →  oEmbed API (no auth needed)
- *   Instagram / Reddit / all others     →  fetch HTML and parse OG/Twitter-card tags
+ *   Instagram                           →  OG tags via crawler UA, then public embed page
+ *   Reddit / all others                 →  fetch HTML and parse OG/Twitter-card tags
  *
  * Always resolves — never rejects. Returns empty strings on any failure.
  */
 export async function fetchLinkMetadata(rawUrl) {
   try {
     const url = normalizeUrl(rawUrl);
-    if (!url) return { title: '', description: '', imageUrl: '' };
+    if (!url) return EMPTY;
 
     const platform = detectPlatform(url);
+
+    if (platform === 'instagram') {
+      const ig = await tryInstagram(url);
+      if (ig) return ig;
+    }
 
     // Try oEmbed first for supported platforms
     if (OEMBED_ENDPOINTS[platform]) {
@@ -177,8 +277,8 @@ export async function fetchLinkMetadata(rawUrl) {
 
     // Fall back to parsing Open Graph tags from the page HTML
     const og = await tryOpenGraph(url);
-    return og || { title: '', description: '', imageUrl: '' };
+    return og || EMPTY;
   } catch {
-    return { title: '', description: '', imageUrl: '' };
+    return EMPTY;
   }
 }

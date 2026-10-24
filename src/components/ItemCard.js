@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDateTime, isOverdue, isToday } from '../utils/dateUtils';
@@ -20,8 +20,11 @@ const PLATFORM_ICONS = {
   link:      'link-outline',
 };
 
-export default function ItemCard({ item, onPress, onComplete }) {
+export default function ItemCard({ item, onPress, onComplete, onImageError }) {
   const [imgError, setImgError] = useState(false);
+
+  // A refreshed thumbnail URL gets a fresh chance to load
+  useEffect(() => setImgError(false), [item.imageUrl]);
 
   const config  = ACTION_CONFIG[item.actionType] || ACTION_CONFIG.other;
   const domain  = extractDomain(item.url);
@@ -45,7 +48,10 @@ export default function ItemCard({ item, onPress, onComplete }) {
             source={{ uri: item.imageUrl }}
             style={styles.image}
             resizeMode="cover"
-            onError={() => setImgError(true)}
+            onError={() => {
+              setImgError(true);
+              onImageError?.();
+            }}
           />
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: `${config.color}18` }]}>

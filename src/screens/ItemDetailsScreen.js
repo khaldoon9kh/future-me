@@ -85,8 +85,7 @@ export default function ItemDetailsScreen() {
   };
 
   const handleToggleComplete = async () => {
-    await storageService.updateItem(item.id, { completed: !item.completed });
-    loadItem();
+    setItem(await storageService.updateItem(item.id, { completed: !item.completed }));
   };
 
   if (!item) return null;

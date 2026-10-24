@@ -46,6 +46,8 @@ future-me/
     │   └── EmptyState.js          # Empty list illustration
     ├── services/
     │   ├── notificationService.js # Expo Notifications wrapper
+    │   ├── linkMetadataService.js # Link preview fetching (oEmbed / OG tags / Instagram)
+    │   ├── previewRefreshService.js # Back-fills missing or expired previews on saved items
     │   └── shareIntentService.js  # Normalises expo-share-intent payloads
     ├── storage/
     │   └── storageService.js      # AsyncStorage CRUD helpers
